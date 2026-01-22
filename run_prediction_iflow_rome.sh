@@ -1,10 +1,10 @@
-export DEEPSEEK_TOKENIZER_PATH="xxx"
-export OPENAI_API_KEY="xxx"
-export OPENAI_BASE_URL="https://api.deepseek.com"
+# export DEEPSEEK_TOKENIZER_PATH="xxx"
+export OPENAI_API_KEY=""
+export OPENAI_BASE_URL=""
 
 DATASET_PATH=feabench-data/FEA-Bench-v1.0-Oracle
-MODEL_NAME=deepseek-chat
-RESULTS_ROOT_DIR=scripts/experiments/results_full
+MODEL_NAME=iflow_rome
+RESULTS_ROOT_DIR=scripts/experiments/results_iflow_rome_debug
 
 PROMPT_MODE=natural-detailed
 python -m feabench.run_prediction \
@@ -13,4 +13,6 @@ python -m feabench.run_prediction \
     --model_name_or_path $MODEL_NAME \
     --input_text $PROMPT_MODE \
     --output_dir $RESULTS_ROOT_DIR/$PROMPT_MODE \
-    --num_proc 1
+    --num_proc 60
+
+chmod 777 -R .

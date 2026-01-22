@@ -2,6 +2,7 @@ import logging, json, os
 from tqdm import tqdm
 from transformers import AutoTokenizer
 import openai
+from openai import OpenAI
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -16,6 +17,8 @@ from .tokenizer_online import gpt_tokenize, get_tokenizer_online
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+client = OpenAI(timeout=1800.0)
 
 MODEL_LIMITS = {
     "claude-instant-1": 100_000,
@@ -40,6 +43,7 @@ MODEL_LIMITS = {
     "gpt-4o-2024-05-13": 128_000,
     "deepseek-chat": 64_000,
     "deepseek-reasoner": 64_000,
+    "glm4.6": 128_000,
 }
 
 # The cost per token for each model input.
@@ -71,6 +75,7 @@ MODEL_COST_PER_INPUT = {
     "gpt-4o-2024-05-13": 0.0000025,
     "deepseek-chat": 0.00000014,
     "deepseek-reasoner": 0.00000055,
+    "glm4.6": 0,
 }
 
 # The cost per token for each model output.
@@ -115,8 +120,8 @@ def calc_cost(model_name, input_tokens, output_tokens):
     float: The cost of the response.
     """
     cost = (
-        MODEL_COST_PER_INPUT[model_name] * input_tokens
-        + MODEL_COST_PER_OUTPUT[model_name] * output_tokens
+        MODEL_COST_PER_INPUT.get(model_name, 0) * input_tokens
+        + MODEL_COST_PER_OUTPUT.get(model_name, 0) * output_tokens
     )
     logger.info(
         f"input_tokens={input_tokens}, output_tokens={output_tokens}, cost={cost:.2f}"
@@ -142,7 +147,8 @@ def call_chat(model_name_or_path, inputs, temperature, top_p, **model_args):
     user_message = inputs.split("\n", 1)[1]
 
     try:
-        response = openai.chat.completions.create(
+
+        response = client.chat.completions.create(
             model=model_name_or_path,
             messages=[
                 {"role": "system", "content": system_messages},
@@ -166,9 +172,9 @@ def call_chat(model_name_or_path, inputs, temperature, top_p, **model_args):
         logger.info(f"Response is not well formed: {response}")
         raise e
     except Exception as e:
-        logger.info(f"Error during chat: {e}")
+        logger.info(f"Error during chat: {str(e)}")
         raise e
-    
+
 
 def process_datum_openai(datum, existing_ids, basic_args, input_text, temperature, top_p):
     instance_id = datum["instance_id"]
@@ -235,7 +241,7 @@ def openai_inference(
     """
     encoding = get_tokenizer_online(model_name_or_path)
     test_dataset = test_dataset.filter(
-        lambda x: gpt_tokenize(x[input_text], encoding) <= MODEL_LIMITS[model_name_or_path],
+        lambda x: gpt_tokenize(x[input_text], encoding) <= MODEL_LIMITS.get(model_name_or_path, 128_000),
         desc="Filtering",
         load_from_cache_file=False,
     )
@@ -263,7 +269,7 @@ def openai_inference(
     base_url = os.environ.get("OPENAI_BASE_URL", None)
     if base_url:
         openai.base_url = base_url
-    
+
     temperature = model_args.pop("temperature", 0.2)
     top_p = model_args.pop("top_p", 0.95 if temperature > 0 else 1)
     logger.info(f"Using temperature={temperature}, top_p={top_p}")
