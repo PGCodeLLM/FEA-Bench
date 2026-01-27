@@ -69,24 +69,33 @@ def main(
     max_cost,
     num_proc,
 ):
+    # Validate shard configuration
     if shard_id is None and num_shards is not None:
         logger.warning(
             f"Received num_shards={num_shards} but shard_id is None, ignoring"
         )
     if shard_id is not None and num_shards is None:
         logger.warning(f"Received shard_id={shard_id} but num_shards is None, ignoring")
+    
+    # Parse model arguments from string to dictionary
     model_args = parse_model_args(model_args)
+    
+    # Determine model nickname for output file naming
     model_nickname = model_name_or_path
     if "checkpoint" in Path(model_name_or_path).name:
         model_nickname = Path(model_name_or_path).parent.name
     else:
         model_nickname = Path(model_name_or_path).name
+    
+    # Construct output file path with shard information if provided
     output_file = f"{model_nickname}__{dataset_name_or_path.split('/')[-1]}__{split}"
     if shard_id is not None and num_shards is not None:
         output_file += f"__shard-{shard_id}__num_shards-{num_shards}"
     os.makedirs(output_dir, exist_ok=True)
     output_file = Path(output_dir, output_file + ".jsonl")
     logger.info(f"Will write to {output_file}")
+    
+    # Load existing completed instance IDs to resume from previous runs
     existing_ids = set()
     if os.path.exists(output_file):
         with open(output_file) as f:
@@ -95,24 +104,37 @@ def main(
                 instance_id = data["instance_id"]
                 existing_ids.add(instance_id)
     logger.info(f"Read {len(existing_ids)} already completed ids from {output_file}")
+    
+    # Load dataset from disk or HuggingFace Hub
     if Path(dataset_name_or_path).exists():
         dataset = load_from_disk(dataset_name_or_path)
     else:
         dataset = load_dataset(dataset_name_or_path)
+    
+    # Validate split exists and extract it
     if not split in dataset:
         raise ValueError(f"Invalid split {split} for dataset {dataset_name_or_path}")
     dataset = dataset[split]
+    
+    # Sort dataset by input text length for more efficient batching
     lens = np.array(list(map(len, dataset[input_text])))
     dataset = dataset.select(np.argsort(lens))
+    
+    # Filter out already completed instances
     if len(existing_ids) > 0:
         dataset = dataset.filter(
             lambda x: x["instance_id"] not in existing_ids,
             desc="Filtering out existing ids",
             load_from_cache_file=False,
         )
+    
+    # Apply sharding if specified for distributed processing
     if shard_id is not None and num_shards is not None:
         dataset = dataset.shard(num_shards, shard_id, contiguous=True)
+    
     logger.info(f"{len(dataset)} instances to be inferred.")
+    
+    # Prepare inference arguments
     inference_args = {
         "test_dataset": dataset,
         "model_name_or_path": model_name_or_path,
@@ -123,16 +145,20 @@ def main(
         "input_text": input_text,
         "num_proc": num_proc,
     }
+    
+    # Run inference based on model type
     if model_type == "openai":
         from .prediction.prediction_openai import openai_inference
         openai_inference(**inference_args)
     elif model_type == "vllm":
         from .prediction.prediction_vllm import vllm_inference
+        # Remove arguments not supported by vllm
         inference_args.pop("max_cost")
         inference_args.pop("num_proc")
         vllm_inference(**inference_args)
     else:
         raise NotImplementedError(f"{model_type} has not been supported for now.")
+    
     logger.info(f"Done!")
 
 
