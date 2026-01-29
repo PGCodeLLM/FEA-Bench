@@ -60,8 +60,10 @@ def main(
     dataset_name_or_path,
     split,
     input_text,
+    work_mode,
     model_type,
     model_name_or_path,
+    agent_name,
     shard_id,
     num_shards,
     output_dir,
@@ -69,6 +71,10 @@ def main(
     max_cost,
     num_proc,
 ):
+    # Validate work_mode and agent_name
+    if work_mode == "agentic" and not agent_name:
+        raise ValueError("agent_name is required when work_mode is 'agentic'")
+    
     # Validate shard configuration
     if shard_id is None and num_shards is not None:
         logger.warning(
@@ -146,18 +152,24 @@ def main(
         "num_proc": num_proc,
     }
     
-    # Run inference based on model type
-    if model_type == "openai":
-        from .prediction.prediction_openai import openai_inference
-        openai_inference(**inference_args)
-    elif model_type == "vllm":
-        from .prediction.prediction_vllm import vllm_inference
-        # Remove arguments not supported by vllm
+    # Remove arguments not supported by vllm
+    if model_type == "vllm":
         inference_args.pop("max_cost")
         inference_args.pop("num_proc")
-        vllm_inference(**inference_args)
-    else:
-        raise NotImplementedError(f"{model_type} has not been supported for now.")
+        
+    # Run based on work mode
+    if work_mode == "inference":
+        # Run inference based on model type
+        if model_type == "openai":
+            from .prediction.prediction_openai import openai_inference
+            openai_inference(**inference_args)
+        elif model_type == "vllm":
+            from .prediction.prediction_vllm import vllm_inference
+            vllm_inference(**inference_args)
+    elif work_mode == "agentic":
+        from .prediction.prediction_agentic import run_agent
+        inference_args["agent_name"] = agent_name
+        run_agent(**inference_args)
     
     logger.info(f"Done!")
 
@@ -183,15 +195,28 @@ if __name__ == "__main__":
         help="the item key of dataset as input text to LLMs",
     )
     parser.add_argument(
+        "--work_mode",
+        type=str,
+        default="inference",
+        help="Work mode: 'inference' for standard inference or 'agentic' for agent-based approach.",
+        choices=['inference', 'agentic'],
+    )
+    parser.add_argument(
         "--model_type",
         type=str,
-        help="Type of LLMs. For now support 'openai' or 'vllm' two types.",
+        help="Type of LLMs for inference mode. For now support 'openai' or 'vllm' types.",
         choices=['openai', 'vllm'],
     )
     parser.add_argument(
         "--model_name_or_path",
         type=str,
         help="Name of API model or VLLM. Update MODEL* constants in this file to add new models.",
+    )
+    parser.add_argument(
+        "--agent_name",
+        type=str,
+        default=None,
+        help="Name of the agent to use. Required when work_mode is 'agentic'.",
     )
     parser.add_argument(
         "--shard_id",
