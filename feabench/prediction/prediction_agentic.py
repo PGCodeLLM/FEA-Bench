@@ -449,7 +449,8 @@ def run_instance(
             logger.info(f"Agent output for {instance_id} written to {agent_output_path}")
             if timed_out:
                 f.write(f"\n\nTimeout error: {timeout} seconds exceeded.")
-                logger.warning(f"Agent timed out after {timeout} seconds.")
+                logger.error(f"Agent timed out after {timeout} seconds.")
+                raise Exception(f"Agent execution timed out after {timeout} seconds")
         
         # Generate git patch following the correct process
         logger.info("Generating git patch from changes...")
@@ -554,6 +555,7 @@ def run_instance(
             logger.info(f"Generated patch saved to {patch_file}")
         else:
             logger.error("Failed to generate git patch after all retries")
+            raise Exception(f"Failed to generate git patch after {max_retries} retries")
         
         logger.info(f"Agent execution completed for {instance_id}")
         
