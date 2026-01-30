@@ -579,11 +579,6 @@ def run_instance(
             "timed_out": timed_out,
             "patch": git_patch if git_patch else ""
         }
-        
-    except BuildImageError as e:
-        error_msg = traceback.format_exc()
-        logger.info(error_msg)
-        print(e)
     except Exception as e:
         error_msg = (f"Error in running agent for {instance_id}: {e}\n"
                      f"{traceback.format_exc()}\n"
@@ -595,7 +590,7 @@ def run_instance(
             output_record = {
                 "instance_id": instance_id,
                 "model_name_or_path": agent.__class__.__name__,
-                "full_output": "",
+                "full_output": str(e),
                 "model_patch": ""
             }
             
@@ -604,13 +599,14 @@ def run_instance(
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, 'a') as f:
                     f.write(json.dumps(output_record) + '\n')
+        
+        raise e
     finally:
         # Remove instance container + image, close logger
         cleanup_container(client, container, logger)
         if rm_image:
             remove_image(client, test_spec.instance_image_key, logger)
         close_logger(logger)
-    return instance_id, {"success": False, "patch": ""}
 
 
 def run_instances(
