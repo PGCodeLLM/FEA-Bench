@@ -521,7 +521,7 @@ def run_instance(
         while n_retries < max_retries and git_patch is None:
             logger.info(f"Generating git diff (attempt {n_retries + 1}/{max_retries})...")
             result = container.exec_run(
-                f'git diff --no-color --cached {base_commit} > /tmp/patch.diff',
+                f'bash -c "git diff --no-color --cached {base_commit} > /tmp/patch.diff"',
                 workdir=DOCKER_WORKDIR,
                 user=DOCKER_USER
             )
