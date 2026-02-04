@@ -350,6 +350,7 @@ def run_instance(
         force_rebuild: bool,
         client: docker.DockerClient,
         run_id: str,
+        model_nickname: str,
         timeout: int | None = None,
         output_file: str = None,
         file_lock: threading.Lock = None,
@@ -365,6 +366,7 @@ def run_instance(
         force_rebuild (bool): Whether to force rebuild the image
         client (docker.DockerClient): Docker client
         run_id (str): Run ID
+        model_nickname (str): Model nickname for log dir naming
         timeout (int): Timeout for running agent
         output_file (str): Output file path to write results
         file_lock (threading.Lock): Lock for thread-safe file writing
@@ -372,7 +374,7 @@ def run_instance(
     # Set up logging directory
     instance_id = test_spec.instance_id
     agent_name = agent.__class__.__name__
-    log_dir = RUN_EVALUATION_LOG_DIR / run_id / agent_name / instance_id
+    log_dir = RUN_EVALUATION_LOG_DIR / run_id / agent_name / model_nickname / instance_id
 
     # Set up logger
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -710,6 +712,13 @@ def run_instances(
         # Create empty file or truncate existing one
         output_path.touch()
         print(f"Output will be written to: {output_file}")
+    
+    # Determine model nickname for output file naming
+    model_nickname = model_name_or_path
+    if "checkpoint" in Path(model_name_or_path).name:
+        model_nickname = Path(model_name_or_path).parent.name
+    else:
+        model_nickname = Path(model_name_or_path).name
 
     # run instances in parallel
     payloads = []
@@ -730,6 +739,7 @@ def run_instances(
             force_rebuild,
             client,
             run_id,
+            model_nickname,
             timeout,
             output_file,
             file_lock,
