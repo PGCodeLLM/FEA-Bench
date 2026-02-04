@@ -114,7 +114,7 @@ class Agent:
         self.base_url = base_url
         self.model = model_name_or_path
     
-    def install(self, container, logger, workdir: str, user: str) -> bool:
+    def install(self, container, logger, workdir: str, user: str, use_npm: bool = True) -> bool:
         """
         Install the agent and its dependencies in the container.
         
@@ -123,6 +123,7 @@ class Agent:
             logger: Logger instance
             workdir: Working directory in the container
             user: User to run commands as
+            use_npm: Whether to use npm for installation (applicable to some agents)
             
         Returns:
             bool: True if installation was successful, False otherwise
@@ -142,24 +143,64 @@ class Agent:
 class IFlowAgent(Agent):
     """iFlow CLI agent implementation."""
     
-    def install(self, container, logger, workdir: str, user: str) -> bool:
+    def install(self, container, logger, workdir: str, user: str, use_npm: bool = False, cached_archive_path: str = "iflow-cli-npm.tar.gz") -> bool:
         """Install iflow-cli agent."""
         logger.info("Installing iflow-cli agent...")
         
-        # Installing iflow-cli - removing running cli at the end of install script to avoid interactive prompt
-        # and adding npm timeout configuration
-        install_result = container.exec_run(
-            'bash -c "curl -fsSL https://cloud.iflow.cn/iflow-cli/install.sh | sed \'/^[[:space:]]*iflow[[:space:]]*$/d\' | sed \'/install_iFlow_cli() {/a\\    log_info Configuring npm timeout settings...\\n    npm config set fetch-timeout 600000\\n    npm config set fetch-retry-mintimeout 20000\\n    npm config set fetch-retry-maxtimeout 120000\\n    npm config set fetch-retries 5\' | bash"',
-            workdir=workdir,
-            user=user
-        )
+        if use_npm:
+            # Installing iflow-cli using npm - removing running cli at the end of install script to avoid interactive prompt
+            # and adding npm timeout configuration
+            logger.info("Using npm-based installation...")
+            install_result = container.exec_run(
+                'bash -c "curl -fsSL https://cloud.iflow.cn/iflow-cli/install.sh | sed \'/^[[:space:]]*iflow[[:space:]]*$/d\' | sed \'/install_iFlow_cli() {/a\\    log_info Configuring npm timeout settings...\\n    npm config set fetch-timeout 600000\\n    npm config set fetch-retry-mintimeout 20000\\n    npm config set fetch-retry-maxtimeout 120000\\n    npm config set fetch-retries 5\' | bash"',
+                workdir=workdir,
+                user=user
+            )
 
-        logger.debug("iflow-cli installation output:")
-        logger.debug(install_result.output.decode('utf-8'))
-        
-        if install_result.exit_code != 0:
-            logger.warning(f"Failed to install iflow-cli: {install_result.output.decode('utf-8')}")
-            return False
+            logger.debug("iflow-cli installation output:")
+            logger.debug(install_result.output.decode('utf-8'))
+            
+            if install_result.exit_code != 0:
+                logger.warning(f"Failed to install iflow-cli: {install_result.output.decode('utf-8')}")
+                return False
+        else:
+            # Alternative installation: extract pre-packaged tar.gz
+            logger.info("Using tar.gz-based installation...")
+            
+            # Copy iflow-cli-npm.tar.gz to /root in container using put_archive directly
+            logger.info(f"Copying {cached_archive_path} to container...")
+            tar_file = Path(cached_archive_path)
+            if not tar_file.exists():
+                logger.error(f"{cached_archive_path} not found in current directory")
+                return False
+            
+            # Read the tar.gz file and use put_archive directly
+            with open(tar_file, "rb") as f:
+                data = f.read()
+            
+            # put_archive extracts the tar automatically to the specified path
+            container.put_archive("/root", data)
+            logger.info(f"{cached_archive_path} copied and extracted successfully")
+            
+            # Append paths to /root/.bashrc
+            logger.info("Updating /root/.bashrc with environment variables...")
+            bashrc_append = '''\nexport NVM_DIR="/root/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+export PATH="$HOME/.npm-global/bin:/root/.nvm/versions/node/v22.22.0/bin:$PATH"
+'''
+            
+            append_result = container.exec_run(
+                f'bash -c "echo {shlex.quote(bashrc_append)} >> /root/.bashrc"',
+                workdir="/root",
+                user=user
+            )
+            
+            if append_result.exit_code != 0:
+                logger.warning(f"Failed to update .bashrc: {append_result.output.decode('utf-8')}")
+                return False
+            
+            logger.info("/root/.bashrc updated successfully")
         
         logger.info("iflow-cli installed successfully")
         
