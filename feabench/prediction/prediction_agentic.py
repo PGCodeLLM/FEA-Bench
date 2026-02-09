@@ -309,11 +309,74 @@ class OpenHandsAgent(Agent):
         return f"openhands --problem {escaped_problem} --output /output.patch"
 
 
+class ClaudeCodeAgent(Agent):
+    """Claude Code agent implementation."""
+    
+    def install(self, container, logger, workdir: str, user: str, use_cache: bool = True) -> bool:
+        """Install Claude Code agent."""
+        logger.info("Installing Claude Code agent...")
+        
+        # Install Claude Code using the official installation script
+        logger.info("Using curl-based installation...")
+        install_result = container.exec_run(
+            'bash -c "curl -fsSL https://claude.ai/install.sh | bash"',
+            workdir=workdir,
+            user=user
+        )
+        
+        logger.debug("Claude Code installation output:")
+        logger.debug(install_result.output.decode('utf-8'))
+        
+        if install_result.exit_code != 0:
+            logger.warning(f"Failed to install Claude Code: {install_result.output.decode('utf-8')}")
+            return False
+        
+        # Add Claude Code to PATH in .bashrc
+        logger.info("Updating /root/.bashrc with PATH...")
+        bashrc_append = '\nexport PATH="$HOME/.local/bin:$PATH"\n'
+        
+        append_result = container.exec_run(
+            f'bash -c "echo {shlex.quote(bashrc_append)} >> /root/.bashrc"',
+            workdir="/root",
+            user=user
+        )
+        
+        if append_result.exit_code != 0:
+            logger.warning(f"Failed to update .bashrc: {append_result.output.decode('utf-8')}")
+            return False
+        
+        logger.info("/root/.bashrc updated successfully")
+
+        # Create symlink from ~/.claude/projects/ to /logs
+        logger.info("Creating symlink from ~/.claude/projects/ to /logs...")
+        symlink_result = container.exec_run(
+            'bash -c "mkdir -p ~/.claude && ln -sf /logs ~/.claude/projects"',
+            workdir="/root",
+            user=user
+        )
+
+        if symlink_result.exit_code != 0:
+            logger.warning(f"Failed to create symlink: {symlink_result.output.decode('utf-8')}")
+            return False
+
+        logger.info("Symlink created successfully")
+
+        logger.info("Claude Code installed successfully")
+        return True
+    
+    def get_cli_command(self) -> str:
+        """Build Claude Code execution command with environment variables."""
+        escaped_problem = shlex.quote(self.problem_statement)
+        # Pass authentication via environment variables
+        return f'ANTHROPIC_AUTH_TOKEN="{self.api_key}" ANTHROPIC_BASE_URL="{self.base_url}" ANTHROPIC_MODEL="{self.model}" IS_SANDBOX=1 claude --dangerously-skip-permissions -p {escaped_problem}'
+
+
 # Agent registry for easy lookup
 AGENT_REGISTRY = {
     "iflow-cli": IFlowAgent,
     "sweagent": SWEAgent,
     "openhands": OpenHandsAgent,
+    "claude-code": ClaudeCodeAgent,
 }
 
 
@@ -399,6 +462,17 @@ def run_instance(
         )
         container.start()
         logger.info(f"Container for {instance_id} started: {container.id}")
+        
+        # Fix ownership of /logs to match host user (avoid root-owned files on host)
+        host_uid = os.getuid()
+        host_gid = os.getgid()
+        logger.info(f"Setting /logs ownership to {host_uid}:{host_gid}")
+        chown_result = container.exec_run(
+            f"chown -R {host_uid}:{host_gid} /logs",
+            user="root"
+        )
+        if chown_result.exit_code != 0:
+            logger.warning(f"Failed to change /logs ownership: {chown_result.output.decode(UTF8)}")
 
         # Get repo and base_commit from instance
         repo = instance.get('repo', test_spec.repo)
