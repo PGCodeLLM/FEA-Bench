@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import docker
+from docker.types import Mount
 import json
 import os
 import platform
@@ -253,7 +254,7 @@ print('Configuration updated successfully')
         """Build iflow-cli execution command."""
         # Escape single quotes in problem statement for bash
         escaped_problem = shlex.quote(self.problem_statement)
-        return f'API_KEY="{self.api_key}" BASE_URL="{self.base_url}" MODEL_NAME="{self.model}" iflow -p {escaped_problem} -o /output.log'
+        return f'iflow -p {escaped_problem} --output-file /logs/exec_info.json --telemetry --telemetry-outfile /logs/telemetry_traces.txt --telemetry-log-prompts'
 
 
 class SWEAgent(Agent):
@@ -384,8 +385,18 @@ def run_instance(
     # Run the instance
     container = None
     try:
-        # Build + start instance container (instance image should already be built)
-        container = build_container(test_spec, client, run_id, logger, rm_image, force_rebuild)
+        # Build + start instance container
+        # Mount log_dir to /logs in the container
+        # Use mounts instead of volumes to avoid issues with colons in paths
+        container = build_container(
+            test_spec, 
+            client, 
+            run_id, 
+            logger, 
+            rm_image, 
+            force_rebuild,
+            container_kwargs={'mounts': [Mount(target='/logs', source=str(log_dir.absolute()), type='bind')]}
+        )
         container.start()
         logger.info(f"Container for {instance_id} started: {container.id}")
 
