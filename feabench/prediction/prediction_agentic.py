@@ -114,7 +114,7 @@ class Agent:
         self.base_url = base_url
         self.model = model_name_or_path
     
-    def install(self, container, logger, workdir: str, user: str, use_npm: bool = True) -> bool:
+    def install(self, container, logger, workdir: str, user: str, use_cache: bool = True) -> bool:
         """
         Install the agent and its dependencies in the container.
         
@@ -123,7 +123,7 @@ class Agent:
             logger: Logger instance
             workdir: Working directory in the container
             user: User to run commands as
-            use_npm: Whether to use npm for installation (applicable to some agents)
+            use_cache: Whether to use cached installation (applicable to some agents)
             
         Returns:
             bool: True if installation was successful, False otherwise
@@ -143,27 +143,11 @@ class Agent:
 class IFlowAgent(Agent):
     """iFlow CLI agent implementation."""
     
-    def install(self, container, logger, workdir: str, user: str, use_npm: bool = False, cached_archive_path: str = "iflow-cli-npm.tar.gz") -> bool:
+    def install(self, container, logger, workdir: str, user: str, use_cache: bool = True, cached_archive_path: str = "iflow-cli-npm.tar.gz") -> bool:
         """Install iflow-cli agent."""
         logger.info("Installing iflow-cli agent...")
         
-        if use_npm:
-            # Installing iflow-cli using npm - removing running cli at the end of install script to avoid interactive prompt
-            # and adding npm timeout configuration
-            logger.info("Using npm-based installation...")
-            install_result = container.exec_run(
-                'bash -c "curl -fsSL https://cloud.iflow.cn/iflow-cli/install.sh | sed \'/^[[:space:]]*iflow[[:space:]]*$/d\' | sed \'/install_iFlow_cli() {/a\\    log_info Configuring npm timeout settings...\\n    npm config set fetch-timeout 600000\\n    npm config set fetch-retry-mintimeout 20000\\n    npm config set fetch-retry-maxtimeout 120000\\n    npm config set fetch-retries 5\' | bash"',
-                workdir=workdir,
-                user=user
-            )
-
-            logger.debug("iflow-cli installation output:")
-            logger.debug(install_result.output.decode('utf-8'))
-            
-            if install_result.exit_code != 0:
-                logger.warning(f"Failed to install iflow-cli: {install_result.output.decode('utf-8')}")
-                return False
-        else:
+        if use_cache:
             # Alternative installation: extract pre-packaged tar.gz
             logger.info("Using tar.gz-based installation...")
             
@@ -201,6 +185,22 @@ export PATH="$HOME/.npm-global/bin:/root/.nvm/versions/node/v22.22.0/bin:$PATH"
                 return False
             
             logger.info("/root/.bashrc updated successfully")
+        else:
+            # Installing iflow-cli using npm - removing running cli at the end of install script to avoid interactive prompt
+            # and adding npm timeout configuration
+            logger.info("Using npm-based installation...")
+            install_result = container.exec_run(
+                'bash -c "curl -fsSL https://cloud.iflow.cn/iflow-cli/install.sh | sed \'/^[[:space:]]*iflow[[:space:]]*$/d\' | sed \'/install_iFlow_cli() {/a\\    log_info Configuring npm timeout settings...\\n    npm config set fetch-timeout 600000\\n    npm config set fetch-retry-mintimeout 20000\\n    npm config set fetch-retry-maxtimeout 120000\\n    npm config set fetch-retries 5\' | bash"',
+                workdir=workdir,
+                user=user
+            )
+
+            logger.debug("iflow-cli installation output:")
+            logger.debug(install_result.output.decode('utf-8'))
+            
+            if install_result.exit_code != 0:
+                logger.warning(f"Failed to install iflow-cli: {install_result.output.decode('utf-8')}")
+                return False
         
         logger.info("iflow-cli installed successfully")
         
