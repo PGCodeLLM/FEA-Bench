@@ -70,6 +70,7 @@ def main(
     model_args,
     max_cost,
     num_proc,
+    logs_base_path,
 ):
     # Validate work_mode and agent_name
     if work_mode == "agentic" and not agent_name:
@@ -169,6 +170,7 @@ def main(
     elif work_mode == "agentic":
         from .prediction.prediction_agentic import run_agent
         inference_args["agent_name"] = agent_name
+        inference_args["logs_base_path"] = logs_base_path
         run_agent(**inference_args)
     
     logger.info(f"Done!")
@@ -254,6 +256,12 @@ if __name__ == "__main__":
         type=int,
         default=1,
         help="Parallel API call for openai-type api.",
+    )
+    parser.add_argument(
+        "--logs_base_path",
+        type=str,
+        default=None,
+        help="Base path to prepend to log directory for agentic mode.",
     )
     args = parser.parse_args()
     main(**vars(args))

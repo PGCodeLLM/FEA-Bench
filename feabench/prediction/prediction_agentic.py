@@ -418,6 +418,7 @@ def run_instance(
         timeout: int | None = None,
         output_file: str = None,
         file_lock: threading.Lock = None,
+        logs_base_path: str = None,
     ):
     """
     Run a single instance with the agent.
@@ -434,11 +435,13 @@ def run_instance(
         timeout (int): Timeout for running agent
         output_file (str): Output file path to write results
         file_lock (threading.Lock): Lock for thread-safe file writing
+        logs_base_path (str): Base path to prepend to log directory
     """
     # Set up logging directory
     instance_id = test_spec.instance_id
     agent_name = agent.__class__.__name__
-    log_dir = RUN_EVALUATION_LOG_DIR / run_id / agent_name / model_nickname / instance_id
+    base_log_dir = Path(logs_base_path) / RUN_EVALUATION_LOG_DIR if logs_base_path else RUN_EVALUATION_LOG_DIR
+    log_dir = base_log_dir / run_id / agent_name / model_nickname / instance_id
 
     # Set up logger
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -753,6 +756,7 @@ def run_instances(
         instance_image_tag: str = 'latest',
         input_text_key: str = 'problem_statement',
         model_name_or_path: str = None,
+        logs_base_path: str = None,
     ):
     """
     Run all instances with the agent in parallel.
@@ -771,6 +775,7 @@ def run_instances(
         instance_image_tag (str): Tag for instance images
         input_text_key (str): Key in instance dict that contains the problem statement
         model_name_or_path (str): Model name or path to use
+        logs_base_path (str): Base path to prepend to log directory
     """
     client = docker.from_env()
     test_specs = list(map(
@@ -828,6 +833,7 @@ def run_instances(
             timeout,
             output_file,
             file_lock,
+            logs_base_path,
         ))
     
     # run instances in parallel (results are written incrementally by each worker)
@@ -845,6 +851,7 @@ def run_agent(
     max_cost,
     input_text,
     num_proc,
+    logs_base_path=None,
 ):
     """
     Run agent on all instances in the test dataset.
@@ -859,6 +866,7 @@ def run_agent(
         max_cost: Maximum cost (not used in agentic mode)
         input_text (str): Input text field name
         num_proc (int): Number of parallel processes
+        logs_base_path (str): Base path to prepend to log directory
     """
     # Filter out already completed instances
     if existing_ids:
@@ -879,4 +887,5 @@ def run_agent(
         instance_image_tag="latest",
         input_text_key=input_text,
         model_name_or_path=model_name_or_path,
+        logs_base_path=logs_base_path,
     )
