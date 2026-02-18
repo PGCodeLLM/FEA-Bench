@@ -783,6 +783,9 @@ def run_instances(
         instances
     ))
 
+    # build environment images
+    build_env_images(client, instances, force_rebuild, max_workers)
+
     # print number of existing instance images
     instance_image_ids = {x.instance_image_key for x in test_specs}
     existing_images = {
