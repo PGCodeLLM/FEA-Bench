@@ -367,8 +367,10 @@ class ClaudeCodeAgent(Agent):
     def get_cli_command(self) -> str:
         """Build Claude Code execution command with environment variables."""
         escaped_problem = shlex.quote(self.problem_statement)
+        # Remove trailing /v1 in base_url if present, as claude CLI expects base URL without version path
+        base_url = self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
         # Pass authentication via environment variables
-        return f'ANTHROPIC_AUTH_TOKEN="{self.api_key}" ANTHROPIC_BASE_URL="{self.base_url}" ANTHROPIC_MODEL="{self.model}" IS_SANDBOX=1 claude --dangerously-skip-permissions -p {escaped_problem}'
+        return f'ANTHROPIC_AUTH_TOKEN="{self.api_key}" ANTHROPIC_BASE_URL="{base_url}" ANTHROPIC_MODEL="{self.model}" ANTHROPIC_API_KEY="" IS_SANDBOX=1 claude --dangerously-skip-permissions -p {escaped_problem}'
 
 
 # Agent registry for easy lookup
