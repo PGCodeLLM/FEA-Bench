@@ -585,6 +585,15 @@ def run_instance(
                 logger.error(f"Agent timed out after {timeout} seconds.")
                 raise Exception(f"Agent execution timed out after {timeout} seconds")
         
+        # Fix ownership of /logs again after agent execution (some agents create folders during execution)
+        logger.info(f"Setting /logs ownership to {host_uid}:{host_gid} after agent execution")
+        chown_result = container.exec_run(
+            f"chown -R {host_uid}:{host_gid} /logs",
+            user="root"
+        )
+        if chown_result.exit_code != 0:
+            logger.warning(f"Failed to change /logs ownership: {chown_result.output.decode(UTF8)}")
+        
         # Generate git patch following the correct process
         logger.info("Generating git patch from changes...")
         
