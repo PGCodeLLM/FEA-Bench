@@ -367,10 +367,15 @@ class ClaudeCodeAgent(Agent):
     def get_cli_command(self) -> str:
         """Build Claude Code execution command with environment variables."""
         escaped_problem = shlex.quote(self.problem_statement)
-        # Remove trailing /v1 in base_url if present, as claude CLI expects base URL without version path
-        base_url = self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
-        # Pass authentication via environment variables
-        return f'ANTHROPIC_AUTH_TOKEN="{self.api_key}" ANTHROPIC_BASE_URL="{base_url}" ANTHROPIC_MODEL="{self.model}" ANTHROPIC_API_KEY="" IS_SANDBOX=1 claude --dangerously-skip-permissions -p {escaped_problem}'
+        # Check if the api_key is an OAuth token (starts with "sk-ant-oat")
+        if self.api_key and self.api_key.startswith("sk-ant-oat"):
+            # OAuth token mode: authenticate via CLAUDE_CODE_OAUTH_TOKEN only
+            return f'CLAUDE_CODE_OAUTH_TOKEN="{self.api_key}" ANTHROPIC_MODEL="{self.model}" IS_SANDBOX=1 claude --dangerously-skip-permissions -p {escaped_problem}'
+        else:
+            # API key mode: provide base_url and api key via environment variables
+            # Remove trailing /v1 in base_url if present, as claude CLI expects base URL without version path
+            base_url = self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
+            return f'ANTHROPIC_AUTH_TOKEN="{self.api_key}" ANTHROPIC_BASE_URL="{base_url}" ANTHROPIC_MODEL="{self.model}" ANTHROPIC_API_KEY="" IS_SANDBOX=1 claude --dangerously-skip-permissions -p {escaped_problem}'
 
 
 # Agent registry for easy lookup
