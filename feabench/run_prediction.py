@@ -171,6 +171,7 @@ def main(
         from .prediction.prediction_agentic import run_agent
         inference_args["agent_name"] = agent_name
         inference_args["logs_base_path"] = logs_base_path
+        inference_args["dataset_name_or_path"] = dataset_name_or_path
         run_agent(**inference_args)
     
     logger.info(f"Done!")

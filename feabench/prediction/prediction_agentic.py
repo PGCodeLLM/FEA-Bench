@@ -426,6 +426,7 @@ def run_instance(
         output_file: str = None,
         file_lock: threading.Lock = None,
         logs_base_path: str = None,
+        dataset_name_or_path: str = None,
     ):
     """
     Run a single instance with the agent.
@@ -443,12 +444,14 @@ def run_instance(
         output_file (str): Output file path to write results
         file_lock (threading.Lock): Lock for thread-safe file writing
         logs_base_path (str): Base path to prepend to log directory
+        dataset_name_or_path (str): Dataset name or path
     """
     # Set up logging directory
     instance_id = test_spec.instance_id
     agent_name = agent.__class__.__name__
     base_log_dir = Path(logs_base_path) / RUN_EVALUATION_LOG_DIR if logs_base_path else RUN_EVALUATION_LOG_DIR
-    log_dir = base_log_dir / run_id / agent_name / model_nickname / instance_id
+    dataset_name = dataset_name_or_path.split('/')[-1] if dataset_name_or_path else 'unknown'
+    log_dir = base_log_dir / run_id / dataset_name / agent_name / model_nickname / instance_id
 
     # Set up logger
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -773,6 +776,7 @@ def run_instances(
         input_text_key: str = 'problem_statement',
         model_name_or_path: str = None,
         logs_base_path: str = None,
+        dataset_name_or_path: str = None,
     ):
     """
     Run all instances with the agent in parallel.
@@ -792,6 +796,7 @@ def run_instances(
         input_text_key (str): Key in instance dict that contains the problem statement
         model_name_or_path (str): Model name or path to use
         logs_base_path (str): Base path to prepend to log directory
+        dataset_name_or_path (str): Dataset name or path
     """
     client = docker.from_env()
     test_specs = list(map(
@@ -853,6 +858,7 @@ def run_instances(
             output_file,
             file_lock,
             logs_base_path,
+            dataset_name_or_path,
         ))
     
     # run instances in parallel (results are written incrementally by each worker)
@@ -871,6 +877,7 @@ def run_agent(
     input_text,
     num_proc,
     logs_base_path=None,
+    dataset_name_or_path=None,
 ):
     """
     Run agent on all instances in the test dataset.
@@ -886,6 +893,7 @@ def run_agent(
         input_text (str): Input text field name
         num_proc (int): Number of parallel processes
         logs_base_path (str): Base path to prepend to log directory
+        dataset_name_or_path (str): Dataset name or path
     """
     # Filter out already completed instances
     if existing_ids:
@@ -907,4 +915,5 @@ def run_agent(
         input_text_key=input_text,
         model_name_or_path=model_name_or_path,
         logs_base_path=logs_base_path,
+        dataset_name_or_path=dataset_name_or_path,
     )
