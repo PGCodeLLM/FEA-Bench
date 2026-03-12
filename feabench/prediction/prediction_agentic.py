@@ -809,10 +809,13 @@ def run_instances(
 
     # print number of existing instance images
     instance_image_ids = {x.instance_image_key for x in test_specs}
-    existing_images = {
-        tag for i in client.images.list(all=True)
-        for tag in i.tags if tag in instance_image_ids
-    }
+    existing_images = set()
+    for image_id in instance_image_ids:
+        try:
+            client.images.get(image_id)
+            existing_images.add(image_id)
+        except docker.errors.ImageNotFound:
+            pass
     if not force_rebuild and len(existing_images):
         print(f"Found {len(existing_images)} existing instance images. Will reuse them.")
 
